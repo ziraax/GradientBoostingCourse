@@ -1,8 +1,8 @@
-# 🌲 Gradient Boosting — Cours M2 MAS
+# Gradient Boosting — Cours M2 MAS
 
 Ce dépôt contient le support du cours sur le **Gradient Boosting**, réalisé dans le cadre du Master 2 MAS à l’Université de Rennes 2.
 
-## 📘 Contenu
+## Contenu
 
 - **Slides du cours**
   - Introduction : Bagging et Random Forests
@@ -12,7 +12,7 @@ Ce dépôt contient le support du cours sur le **Gradient Boosting**, réalisé 
 - **Travaux Dirigés (TD)**
   - Étude de l'algorithme et réglage des hyperparamètres sur R avec le package gbm
 
-## 👨‍🏫 Auteurs
+## Auteurs
 
 - Walter Hugo  
 - Peyret Solo  
