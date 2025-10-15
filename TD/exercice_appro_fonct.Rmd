@@ -65,7 +65,12 @@ ggplot(df_train, aes(X, Y)) +
 ```{r, eval=FALSE}
 set.seed(4321)
 L2boost <- gbm(
-  formula = Y ~ ., ...
+  formula = Y ~ .,
+  distribution = "gaussian",
+  data = df_train,
+  n.trees = 50000,
+  interaction.depth = 1,
+  shrinkage = 0.01,
 )
 
 

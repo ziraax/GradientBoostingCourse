@@ -1,0 +1,153 @@
+---
+title: 'Exercice : Approximation d’une fonction sinusoïdale par GBM'
+author: "Orlana Hashazinka"
+output:
+  rmdformats::robobook:
+    highlight: kate
+    css: style.css
+    self_contained: false
+    toc_depth: 3
+    code_folding: show
+    thumbnails: true
+    lightbox: true
+  html_document:
+    toc_depth: '3'
+    df_print: paged
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Objectif général
+
+Dans cet exercice, nous allons utiliser un jeu de données simulé pour approximer une fonction sinusoïdale bruitée à l’aide de la méthode du Gradient Boosting (GBM).
+
+## Importation des bibliothèques 
+
+```{r}
+library(tibble)
+library(ggplot2)
+library(gbm)
+library(gridExtra)
+```
+
+## Génération du jeu de données 
+
+On considère un jeu de données 
+(Xi,Yi), i=1,…,250, issu d’un modèle de régression :
+
+yi=m(xi)+εi
+
+où la vraie fonction de régression est la fonction sinus
+
+```{r}
+set.seed(4321)
+
+x <- seq(-3*pi, 3*pi, by = 0.01)
+y <- sin(x)
+
+X <- runif(250, -3*pi, 3*pi)
+Y <- sin(X) + rnorm(250, sd = 0.25)
+
+df_train <- tibble(X = X, Y = Y)
+df_true  <- tibble(X = x, Y = y)
+
+ggplot(df_train, aes(X, Y)) +
+  geom_point(alpha = 0.4) +
+  geom_line(data = df_true, aes(X, Y), color = "blue", linewidth = 1) +
+  xlab("") + ylab("") +
+  ggtitle("Jeu de données : Sinus bruité")
+
+```
+
+## Ajustement d’un modèle GBM 
+
+1. À l’aide de la fonction gbm du package gbm, construire un algorithme de gradient boosting pour prédire Y en fonction de X.
+On utilisera 50 000 itérations et une distribution gaussienne.
+On fixera la profondeur des arbres à 1 (stumps), le taux d’apprentissage (shrinkage) à 0.01, et bag.fraction = 1.
+Une validation croisée à 5 folds sera effectuée.
+2. Visualiser l’effet de la variable X sur la prédiction du modèle GBM avec la fonction plot.
+
+```{r}
+set.seed(4321)
+L2boost <- gbm(
+  formula = Y ~ .,
+  data = df_train,
+  distribution = "gaussian",
+  n.trees = 50000,
+  interaction.depth = 1,
+  shrinkage = 0.01,
+  bag.fraction = 1,
+  cv.folds = 5
+)
+
+plot(L2boost, i.var = "X")
+
+```
+
+## Visualisation de l’estimateur aux différentes itérations 
+
+3. Calculer les prédictions de l’estimateur après 1, 1000, 10000, 20000 et 50 000 arbres.
+
+4. Tracer chaque prédiction en rouge sur les données d’apprentissage (points) et la fonction réelle (ligne bleue).
+
+5. Observer l’évolution de l’estimateur.
+
+```{r}
+
+pred_1     <- predict(L2boost, newdata = df_true, n.trees = 1)
+pred_1000  <- predict(L2boost, newdata = df_true, n.trees = 1000)
+pred_10000 <- predict(L2boost, newdata = df_true, n.trees = 10000)
+pred_20000 <- predict(L2boost, newdata = df_true, n.trees = 20000)
+pred_30000 <- predict(L2boost, newdata = df_true, n.trees = 30000)
+pred_50000 <- predict(L2boost, newdata = df_true, n.trees = 50000)
+
+plot_boost <- function(pred, titre){
+  ggplot() +
+    geom_point(data = df_train, aes(X, Y), alpha = 0.4) +
+    geom_line(data = df_true, aes(X, Y), color = "blue", linewidth = 1) +
+    geom_line(aes(x = df_true$X, y = pred), color = "red", linewidth = 1) +
+    ggtitle(titre) + xlab("") + ylab("")
+}
+
+p1 <- plot_boost(pred_1, "1 arbre")
+p2 <- plot_boost(pred_1000, "1000 arbres")
+p3 <-  plot_boost(pred_10000, "10000 arbres")
+p4 <- plot_boost(pred_20000, "20000 arbres")
+p5 <-  plot_boost(pred_30000, "30000 arbres")
+p6 <- plot_boost(pred_50000, "50000 arbres")
+
+grid.arrange(p1, p2, p3,p4,p5,p6,  nrow = 2) 
+
+```
+
+## Sélection du nombre optimal d’arbres
+
+6. Identifier le nombre optimal d’arbres (best_iter) à l’aide de la validation croisée intégrée.
+7. Afficher ce nombre et interpréter son rôle dans le compromis biais-variance.
+```{r}
+best_iter <- gbm.perf(L2boost, method = "cv")
+cat("Nombre d’arbres optimal selon la CV :", best_iter, "\n")
+
+```
+
+## Visualisation de l’estimateur optimal
+
+8. Calculer les prédictions du modèle en utilisant le nombre d’arbres optimal.
+
+9. Tracer ces prédictions en rouge sur les données d’apprentissage et la fonction réelle.
+
+10. Observer la qualité de l’approximation finale.
+
+```{r}
+pred_opt <- predict(L2boost, newdata = df_true, n.trees = best_iter)
+plot_boost(pred_opt, paste("Estimateur optimal (", best_iter, " arbres)", sep = ""))
+
+```
+
+
+
+
+
