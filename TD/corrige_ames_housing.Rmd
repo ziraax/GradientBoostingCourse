@@ -1,0 +1,241 @@
+---
+title: 'Exercice : la recherche par grille (grid search)'
+author: "Orlana Hashazinka"
+output:
+  rmdformats::robobook:
+    highlight: tango
+    css: "style.css"
+    self_contained: false
+    toc_depth: 3
+    code_folding: show
+    thumbnails: true
+    lightbox: true
+---
+    
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Objectif général
+
+Dans cet exercice, nous allons utiliser le jeu de données **Ames Housing** pour modéliser le **prix de vente (`Sale_Price`)** à l’aide de la méthode du **Gradient Boosting (GBM)**. 
+
+## Importation des bibliothèques 
+
+```{r}
+library(dplyr)
+library(purrr)
+library(rsample)
+library(gbm)
+library(AmesHousing)
+```
+
+## Le jeu de données 
+
+```{r}
+# Chargement du jeu de données
+ames <- make_ames()
+
+# Division des données : 70% apprentissage, 30% test
+set.seed(123)
+split <- initial_split(ames, prop = 0.7, strata = "Sale_Price")
+ames_train <- training(split)
+ames_test  <- testing(split)
+```
+
+## Construction d’un premier modèle de boosting 
+
+
+1. À l’aide de la fonction gbm du package gbm, construire un algorithme de gradient boosting pour prédire Sale_Price en fonction des variables explicatives disponibles.
+On utilisera 5 000 itérations (arbres) et une distribution gaussienne.
+On gardera les autres paramètres par défaut, sauf bag.fraction = 1.
+Une validation croisée à 10 folds sera effectuée pour évaluer la performance du modèle.
+
+2. Visualiser l’effet des variables explicatives les plus importantes sur la prédiction du modèle GBM à l’aide de la fonction summary().
+
+```{r}
+set.seed(123)
+
+ames_gbm1 <- gbm(
+  formula = Sale_Price ~ .,
+  data = ames_train,
+  distribution = "gaussian",
+  n.trees = 5000,
+  shrinkage = 0.1,
+  interaction.depth = 3,
+  n.minobsinnode = 10,
+  cv.folds = 10
+)
+
+summary(ames_gbm1, cBars = 15)
+
+```
+
+## Sélection du nombre optimal d’arbres 
+
+3. À l’aide de la validation croisée intégrée du modèle GBM précédent, déterminer le nombre d’arbres optimal et calculer le RMSE correspondant.
+On pourra utiliser which.min() sur cv.error pour identifier l’itération optimale.
+On pourra également visualiser la performance avec gbm.perf()
+
+```{r}
+# Trouver l'indice du minimum de l'erreur CV
+best_iter <- which.min(ames_gbm1$cv.error)
+best_iter
+
+# Calcul du RMSE correspondant
+best_rmse <- sqrt(ames_gbm1$cv.error[best_iter])
+best_rmse
+
+# Visualisation de la courbe d’erreur CV
+gbm.perf(ames_gbm1, method = "cv")
+
+```
+
+Le nombre d’arbres optimal correspond à l’itération où l’erreur de validation croisée est minimale.
+Le RMSE mesure la précision moyenne du modèle.
+
+## Influence du taux d’apprentissage (learning rate)
+
+4. À l’aide du modèle GBM, testez plusieurs valeurs du paramètre shrinkage : 0.3, 0.1, 0.05, 0.01, 0.005.
+Pour chaque valeur, entraînez le modèle et calculez le RMSE à partir de la validation croisée.
+
+5. Mesurez également le temps de calcul pour chaque valeur.
+
+6. Comparez les performances afin d’observer l’influence du taux d’apprentissage sur la précision et la rapidité du modèle.
+
+```{r}
+# Grille d’hyperparamètres
+hyper_grid <- expand.grid(
+  learning_rate = c(0.3, 0.1, 0.05, 0.01, 0.005),
+  RMSE = NA,
+  Trees = NA,
+  Time = NA
+)
+
+# Boucle d'entraînement
+for (i in seq_len(nrow(hyper_grid))) {
+  set.seed(123)
+  train_time <- system.time({
+    m <- gbm(
+      formula = Sale_Price ~ .,
+      data = ames_train,
+      distribution = "gaussian",
+      n.trees = 5000,
+      shrinkage = hyper_grid$learning_rate[i],
+      interaction.depth = 3,
+      n.minobsinnode = 10,
+      cv.folds = 10
+    )
+  })
+  hyper_grid$RMSE[i]  <- sqrt(min(m$cv.error))
+  hyper_grid$Trees[i] <- which.min(m$cv.error)
+  hyper_grid$Time[i]  <- train_time[["elapsed"]]
+}
+
+# Résultats triés
+arrange(hyper_grid, RMSE)
+
+```
+
+Un taux d’apprentissage faible donne souvent un modèle plus précis mais plus lent à entraîner.
+
+Un taux trop élevé risque un sur-ajustement rapide.
+
+## Recherche multi-paramètres
+
+7. Effectuez une recherche en grille pour tester différentes combinaisons des paramètres :
+interaction.depth (la profondeur maximale des arbres)
+n.minobsinnode (la taille minimale des feuilles)
+
+En conservant :
+
+n.trees = 5000
+shrinkage = 0.01
+
+8. Pour chaque combinaison, entraînez le modèle et calculez le RMSE à partir de la validation croisée.
+
+9. Comparez les résultats pour identifier la combinaison de paramètres qui minimise le RMSE.
+
+```{r}
+# Grille multi-paramètres
+hyper_grid2 <- expand.grid(
+  n.trees = 5000,
+  shrinkage = 0.05,
+  interaction.depth = c(3, 5, 7),
+  n.minobsinnode = c(5, 10, 15)
+)
+
+# Fonction d'entraînement + RMSE
+model_fit <- function(n.trees, shrinkage, interaction.depth, n.minobsinnode) {
+  set.seed(123)
+  m <- gbm(
+    formula = Sale_Price ~ .,
+    data = ames_train,
+    distribution = "gaussian",
+    n.trees = n.trees,
+    shrinkage = shrinkage,
+    interaction.depth = interaction.depth,
+    n.minobsinnode = n.minobsinnode,
+    cv.folds = 10
+  )
+  sqrt(min(m$cv.error))
+}
+
+# Application de la fonction sur la grille
+hyper_grid2$RMSE <- purrr::pmap_dbl(
+  hyper_grid2,
+  ~ model_fit(..1, ..2, ..3, ..4)
+)
+
+# Résultats triés
+arrange(hyper_grid2, RMSE)
+
+```
+
+Les meilleures performances sont obtenues pour une profondeur et un nombre minimal d’observations par nœud équilibrés.
+Trop de profondeur → sur-ajustement ; trop peu → sous-ajustement.
+
+## Évaluation finale sur l’échantillon de test
+
+10. Entraînez un modèle GBM final en utilisant les meilleurs paramètres identifiés précédemment (nombre d’arbres, shrinkage, interaction.depth, n.minobsinnode).
+Effectuez ensuite des prédictions sur l’échantillon de test.
+Calculez le RMSE pour évaluer la performance finale du modèle sur des données non vues.
+
+```{r}
+# Meilleurs paramètres retenus (exemple)
+best_model <- gbm(
+  formula = Sale_Price ~ .,
+  data = ames_train,
+  distribution = "gaussian",
+  n.trees = 5000,
+  shrinkage = 0.05,
+  interaction.depth = 5,
+  n.minobsinnode = 10
+)
+
+# Prédictions sur le test
+pred_test <- predict(best_model, newdata = ames_test, n.trees = 5000)
+
+# Calcul du RMSE test
+test_rmse <- sqrt(mean((ames_test$Sale_Price - pred_test)^2))
+test_rmse
+
+```
+
+Le RMSE obtenu sur les données de test donne une estimation réaliste de la capacité de généralisation du modèle.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
